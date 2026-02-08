@@ -23,6 +23,12 @@ class DrawingARApp {
         this.deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
         this.orientationPermissionGranted = false;
         
+        // Paper Detection
+        this.paperDetector = new PaperDetector();
+        this.paperDetectionEnabled = true;
+        this.detectedPaper = null;
+        this.autoPerspectiveEnabled = true;
+        
         // Grid settings
         this.showGrid = true;
         
@@ -200,6 +206,25 @@ class DrawingARApp {
         document.getElementById('lock-position').addEventListener('change', (e) => {
             this.positionLocked = e.target.checked;
         });
+
+        // Paper Detection toggle
+        const paperToggle = document.getElementById('toggle-paper-detection');
+        if (paperToggle) {
+            paperToggle.addEventListener('change', (e) => {
+                this.paperDetectionEnabled = e.target.checked;
+                if (!e.target.checked) {
+                    this.detectedPaper = null;
+                }
+            });
+        }
+
+        // Auto Perspective toggle
+        const autoToggle = document.getElementById('toggle-auto-perspective');
+        if (autoToggle) {
+            autoToggle.addEventListener('change', (e) => {
+                this.autoPerspectiveEnabled = e.target.checked;
+            });
+        }
 
         // Gyroscope toggle
         const gyroToggle = document.getElementById('toggle-gyro');
@@ -505,39 +530,78 @@ class DrawingARApp {
 
         ctx.save();
 
-        const x = this.templatePosition.x * width;
-        const y = this.templatePosition.y * height;
-        ctx.translate(x, y);
-
-        ctx.rotate((this.templateRotation * Math.PI) / 180);
-
-        const gyroPerspective = this.calculatePerspectiveFromOrientation();
-        
-        if (this.gyroEnabled && this.orientationPermissionGranted) {
-            ctx.transform(
-                1, 
-                gyroPerspective.skewY, 
-                gyroPerspective.skewX, 
-                gyroPerspective.scaleY, 
-                0, 
-                0
+        // Use paper detection for positioning if available and enabled
+        let x, y;
+        if (this.autoPerspectiveEnabled && this.detectedPaper) {
+            const transform = this.paperDetector.calculatePerspectiveTransform(
+                this.detectedPaper,
+                width,
+                height
             );
+            
+            if (transform) {
+                // Position template at detected paper center
+                x = transform.centerX * width;
+                y = transform.centerY * height;
+                
+                // Apply detected rotation
+                ctx.translate(x, y);
+                ctx.rotate(transform.rotation + (this.templateRotation * Math.PI) / 180);
+                
+                // Apply perspective correction
+                const skewX = transform.horizontalSkew * 0.5;
+                const skewY = transform.verticalSkew * 0.5;
+                ctx.transform(1, skewY, skewX, 1, 0, 0);
+            } else {
+                // Fallback to manual position
+                x = this.templatePosition.x * width;
+                y = this.templatePosition.y * height;
+                ctx.translate(x, y);
+                ctx.rotate((this.templateRotation * Math.PI) / 180);
+            }
+        } else {
+            // Manual positioning
+            x = this.templatePosition.x * width;
+            y = this.templatePosition.y * height;
+            ctx.translate(x, y);
+            ctx.rotate((this.templateRotation * Math.PI) / 180);
         }
 
+        // Gyroscope perspective (if enabled and no paper detection)
+        if (!this.autoPerspectiveEnabled || !this.detectedPaper) {
+            const gyroPerspective = this.calculatePerspectiveFromOrientation();
+            
+            if (this.gyroEnabled && this.orientationPermissionGranted) {
+                ctx.transform(
+                    1, 
+                    gyroPerspective.skewY, 
+                    gyroPerspective.skewX, 
+                    gyroPerspective.scaleY, 
+                    0, 
+                    0
+                );
+            }
+        }
+
+        // Manual perspective adjustment
         if (this.templatePerspective !== 0) {
             const skew = this.templatePerspective / 100;
             ctx.transform(1, skew, 0, 1, 0, 0);
         }
 
+        // Mirror
         if (this.templateMirrored) {
             ctx.scale(-1, 1);
         }
 
+        // Scale
         const imgWidth = this.templateImage.width * this.templateScale;
         const imgHeight = this.templateImage.height * this.templateScale;
 
+        // Opacity
         ctx.globalAlpha = this.templateOpacity;
 
+        // Draw centered
         ctx.drawImage(
             this.templateImage,
             -imgWidth / 2,
@@ -593,8 +657,24 @@ class DrawingARApp {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
 
+        // Run paper detection
+        if (this.paperDetectionEnabled && this.video.readyState === this.video.HAVE_ENOUGH_DATA) {
+            this.detectedPaper = this.paperDetector.detectPaper(this.video);
+        }
+
         this.drawTemplate();
         this.drawGrid();
+        
+        // Draw paper detection overlay
+        if (this.paperDetectionEnabled && this.detectedPaper) {
+            this.paperDetector.drawDetectionOverlay(
+                this.overlayCtx,
+                this.detectedPaper,
+                this.overlayCanvas.width,
+                this.overlayCanvas.height
+            );
+        }
+        
         this.updateDebugDisplay();
 
         requestAnimationFrame(() => this.animate());

@@ -554,11 +554,31 @@
 
                 <div class="setting-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="toggle-gyro">
-                        🔄 Auto-Perspektive (Gyroscope)
+                        <input type="checkbox" id="toggle-paper-detection" checked>
+                        📄 Papier-Erkennung (Auto)
                     </label>
                     <div class="setting-hint">
-                        Klicke 🔄 Button unten oder hier aktivieren
+                        Erkennt weißes Papier automatisch wie Dokumentenscanner
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="toggle-auto-perspective" checked>
+                        🎯 Auto-Ausrichtung
+                    </label>
+                    <div class="setting-hint">
+                        Richtet Vorlage automatisch am erkannten Papier aus
+                    </div>
+                </div>
+
+                <div class="setting-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="toggle-gyro">
+                        🔄 Gyroscope (Fallback)
+                    </label>
+                    <div class="setting-hint">
+                        Nur wenn keine Papier-Erkennung - Klicke 🔄 Button unten
                     </div>
                 </div>
 
@@ -598,6 +618,7 @@
         </div>
     </div>
 
+    <script src="paper-detection.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
