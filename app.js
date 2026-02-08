@@ -10,7 +10,7 @@ class DrawingARApp {
         // Template settings
         this.templateImage = null;
         this.templateVisible = true;
-        this.templatePosition = { x: 0.5, y: 0.5 }; // Relative position (0-1)
+        this.templatePosition = { x: 0.5, y: 0.5 };
         this.templateScale = 1.0;
         this.templateOpacity = 0.5;
         this.templateRotation = 0;
@@ -18,8 +18,8 @@ class DrawingARApp {
         this.templateMirrored = false;
         this.positionLocked = false;
         
-        // Gyroscope/Orientation
-        this.gyroEnabled = true;
+        // Gyroscope/Orientation - DISABLED by default to prevent blocking
+        this.gyroEnabled = false;
         this.deviceOrientation = { alpha: 0, beta: 0, gamma: 0 };
         this.orientationPermissionGranted = false;
         
@@ -37,191 +37,94 @@ class DrawingARApp {
 
     async init() {
         try {
-            // Request fullscreen mode
-            this.requestFullscreen();
+            console.log('App initializing...');
             
             await this.setupCamera();
             this.setupCanvas();
             this.setupEventListeners();
-            await this.setupGyroscope();
-            this.updateGyroIndicator();
+            
+            // Setup gyroscope WITHOUT blocking - only on user request
+            this.setupGyroscopeListener();
+            
             this.animate();
             
             document.getElementById('loading').classList.add('hidden');
-            this.showInfoBanner('✅ Bereit! Berühre den Bildschirm, um die Vorlage zu verschieben');
+            this.showInfoBanner('✅ Bereit! Berühre den Bildschirm zum Verschieben');
         } catch (error) {
             console.error('Initialization error:', error);
             document.getElementById('loading').classList.add('hidden');
             
-            // App trotzdem starten (für Testing ohne Kamera)
+            // App trotzdem starten
             this.setupCanvas();
             this.setupEventListeners();
-            await this.setupGyroscope();
-            this.updateGyroIndicator();
+            this.setupGyroscopeListener();
             this.animate();
             
-            this.showInfoBanner('⚠️ App gestartet im Test-Modus (ohne Kamera)', 5000);
-        }
-    }
-
-    async setupGyroscope() {
-        try {
-            // Check if DeviceOrientation is supported
-            if (!window.DeviceOrientationEvent) {
-                console.log('Device Orientation not supported');
-                this.gyroEnabled = false;
-                return;
-            }
-
-            // iOS 13+ requires permission
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                try {
-                    const permission = await DeviceOrientationEvent.requestPermission();
-                    if (permission === 'granted') {
-                        this.orientationPermissionGranted = true;
-                        this.startOrientationTracking();
-                    } else {
-                        console.log('Device Orientation permission denied');
-                        this.gyroEnabled = false;
-                    }
-                } catch (error) {
-                    console.error('Error requesting orientation permission:', error);
-                    this.gyroEnabled = false;
-                }
-            } else {
-                // Non-iOS or older iOS - no permission needed
-                this.orientationPermissionGranted = true;
-                this.startOrientationTracking();
-            }
-        } catch (error) {
-            console.error('Gyroscope setup error:', error);
-            this.gyroEnabled = false;
-        }
-    }
-
-    startOrientationTracking() {
-        window.addEventListener('deviceorientation', (event) => {
-            if (!this.gyroEnabled) return;
-            
-            // Store raw orientation data
-            this.deviceOrientation = {
-                alpha: event.alpha || 0,  // Z-axis (0-360) - rotation around vertical
-                beta: event.beta || 0,    // X-axis (-180 to 180) - front-to-back tilt
-                gamma: event.gamma || 0   // Y-axis (-90 to 90) - left-to-right tilt
-            };
-        });
-    }
-
-    calculatePerspectiveFromOrientation() {
-        if (!this.gyroEnabled || !this.orientationPermissionGranted) {
-            return { skewX: 0, skewY: 0, scaleY: 1 };
-        }
-
-        const { beta, gamma } = this.deviceOrientation;
-        
-        // Beta: front-to-back tilt
-        // When phone tilts forward (positive beta), we need to compensate
-        // Typical reading position: beta around 30-60 degrees
-        const betaNormalized = (beta - 45) / 45; // Normalize around 45° (typical angle)
-        
-        // Gamma: left-to-right tilt
-        const gammaNormalized = gamma / 45;
-        
-        // Calculate perspective transforms
-        // Clamp values to prevent extreme distortion
-        const skewX = Math.max(-0.5, Math.min(0.5, gammaNormalized * 0.3));
-        const skewY = Math.max(-0.5, Math.min(0.5, betaNormalized * 0.3));
-        
-        // Scale compensation for depth perception
-        const scaleY = 1 + Math.abs(betaNormalized) * 0.1;
-        
-        return { skewX, skewY, scaleY };
-    }
-        // Prevent browser UI from showing
-        if (document.documentElement.requestFullscreen) {
-            document.documentElement.requestFullscreen().catch(err => {
-                console.log('Fullscreen request failed:', err);
-            });
-        } else if (document.documentElement.webkitRequestFullscreen) {
-            document.documentElement.webkitRequestFullscreen();
-        }
-        
-        // Lock screen orientation to portrait (optional)
-        if (screen.orientation && screen.orientation.lock) {
-            screen.orientation.lock('portrait').catch(err => {
-                console.log('Orientation lock failed:', err);
-            });
+            this.showInfoBanner('⚠️ App gestartet im Test-Modus', 5000);
         }
     }
 
     async setupCamera() {
         try {
-            // Check if mediaDevices is supported
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                throw new Error('Camera API not supported in this browser');
+                throw new Error('Camera API not supported');
             }
 
+            console.log('Requesting camera access...');
+            
             const constraints = {
                 video: {
-                    facingMode: 'environment', // Rückkamera bevorzugen
+                    facingMode: 'environment',
                     width: { ideal: 1920 },
                     height: { ideal: 1080 }
                 }
             };
             
-            console.log('Requesting camera access...');
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             this.video.srcObject = stream;
             
-            console.log('Camera stream acquired, waiting for video metadata...');
+            console.log('Camera stream acquired');
+            
             return new Promise((resolve, reject) => {
-                this.video.onloadedmetadata = () => {
-                    console.log('Video metadata loaded');
-                    this.video.play()
-                        .then(() => {
-                            console.log('Video playing successfully');
-                            resolve();
-                        })
-                        .catch(err => {
-                            console.error('Error playing video:', err);
-                            reject(err);
-                        });
-                };
-                
-                // Timeout nach 10 Sekunden
-                setTimeout(() => {
+                const timeout = setTimeout(() => {
                     reject(new Error('Camera initialization timeout'));
                 }, 10000);
                 
+                this.video.onloadedmetadata = () => {
+                    clearTimeout(timeout);
+                    console.log('Video metadata loaded');
+                    this.video.play()
+                        .then(() => {
+                            console.log('Video playing');
+                            resolve();
+                        })
+                        .catch(reject);
+                };
+                
                 this.video.onerror = (err) => {
-                    console.error('Video element error:', err);
+                    clearTimeout(timeout);
                     reject(err);
                 };
             });
         } catch (error) {
-            console.error('Kamera-Fehler:', error);
+            console.error('Camera error:', error);
             
-            // Zeige spezifische Fehlermeldung
-            let errorMessage = 'Kamera konnte nicht gestartet werden. ';
+            let errorMessage = 'Kamera-Fehler: ';
             
-            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                errorMessage += 'Bitte erlaube den Kamera-Zugriff in deinen Browser-Einstellungen.';
-            } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-                errorMessage += 'Keine Kamera gefunden. Stelle sicher, dass dein Gerät eine Kamera hat.';
-            } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-                errorMessage += 'Kamera wird bereits von einer anderen App verwendet.';
-            } else if (error.message.includes('not supported')) {
-                errorMessage += 'Dein Browser unterstützt keinen Kamera-Zugriff. Verwende Chrome, Safari oder Firefox.';
+            if (error.name === 'NotAllowedError') {
+                errorMessage += 'Berechtigung verweigert. Bitte erlaube Kamera-Zugriff.';
+            } else if (error.name === 'NotFoundError') {
+                errorMessage += 'Keine Kamera gefunden.';
+            } else if (error.name === 'NotReadableError') {
+                errorMessage += 'Kamera wird bereits verwendet.';
+            } else if (error.message === 'Camera API not supported') {
+                errorMessage += 'Browser unterstützt keine Kamera. Nutze Chrome/Safari.';
             } else {
-                errorMessage += error.message || 'Unbekannter Fehler.';
+                errorMessage += error.message || 'Unbekannter Fehler';
             }
             
-            // Verstecke Loading und zeige Fehler
-            document.getElementById('loading').classList.add('hidden');
             alert(errorMessage);
-            
-            // Optional: Zeige UI auch ohne Kamera
-            this.showInfoBanner('⚠️ App läuft ohne Kamera. Lade eine Vorlage hoch zum Testen.', 5000);
+            throw error;
         }
     }
 
@@ -299,41 +202,85 @@ class DrawingARApp {
         });
 
         // Gyroscope toggle
-        document.getElementById('toggle-gyro').addEventListener('change', (e) => {
-            this.gyroEnabled = e.target.checked;
-            if (e.target.checked && !this.orientationPermissionGranted) {
-                // Request permission if not granted yet
-                this.setupGyroscope();
-            }
-            this.updateGyroIndicator();
-        });
+        const gyroToggle = document.getElementById('toggle-gyro');
+        if (gyroToggle) {
+            gyroToggle.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    this.requestGyroscopePermission();
+                } else {
+                    this.gyroEnabled = false;
+                    this.updateGyroIndicator();
+                }
+            });
+        }
 
-        // Gyroscope indicator button - shows status and requests permission
-        document.getElementById('gyro-indicator').addEventListener('click', async () => {
-            if (!this.orientationPermissionGranted) {
-                await this.setupGyroscope();
-                if (this.orientationPermissionGranted) {
-                    this.showInfoBanner('✅ Gyroscope aktiviert! Neige dein Handy.');
+        // Gyroscope indicator button
+        const gyroIndicator = document.getElementById('gyro-indicator');
+        if (gyroIndicator) {
+            gyroIndicator.addEventListener('click', () => {
+                if (!this.orientationPermissionGranted) {
+                    this.requestGyroscopePermission();
+                } else {
+                    this.gyroEnabled = !this.gyroEnabled;
+                    const toggle = document.getElementById('toggle-gyro');
+                    if (toggle) toggle.checked = this.gyroEnabled;
+                    this.showInfoBanner(this.gyroEnabled ? '🔄 Gyroscope AN' : '⏸️ Gyroscope AUS');
+                    this.updateGyroIndicator();
+                }
+            });
+        }
+
+        // Touch/Mouse events
+        this.setupTouchEvents();
+    }
+
+    setupGyroscopeListener() {
+        // Don't request permission automatically - only setup listener
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', (event) => {
+                if (!this.gyroEnabled) return;
+                
+                this.deviceOrientation = {
+                    alpha: event.alpha || 0,
+                    beta: event.beta || 0,
+                    gamma: event.gamma || 0
+                };
+            });
+        } else {
+            console.log('Device Orientation not supported');
+        }
+    }
+
+    async requestGyroscopePermission() {
+        try {
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                const permission = await DeviceOrientationEvent.requestPermission();
+                if (permission === 'granted') {
+                    this.orientationPermissionGranted = true;
+                    this.gyroEnabled = true;
+                    this.showInfoBanner('✅ Gyroscope aktiviert!');
                 } else {
                     this.showInfoBanner('⚠️ Gyroscope-Berechtigung verweigert');
                 }
             } else {
-                // Toggle gyro on/off
-                this.gyroEnabled = !this.gyroEnabled;
-                document.getElementById('toggle-gyro').checked = this.gyroEnabled;
-                this.showInfoBanner(this.gyroEnabled ? '🔄 Auto-Perspektive AN' : '⏸️ Auto-Perspektive AUS');
+                // Non-iOS or older iOS
+                this.orientationPermissionGranted = true;
+                this.gyroEnabled = true;
+                this.showInfoBanner('✅ Gyroscope aktiviert!');
             }
+            
             this.updateGyroIndicator();
-        });
-
-        // Touch/Mouse events for dragging
-        this.setupTouchEvents();
+            const toggle = document.getElementById('toggle-gyro');
+            if (toggle) toggle.checked = this.gyroEnabled;
+        } catch (error) {
+            console.error('Gyroscope permission error:', error);
+            this.showInfoBanner('❌ Gyroscope-Fehler');
+        }
     }
 
     setupTouchEvents() {
         const canvas = this.overlayCanvas;
         
-        // Mouse events
         canvas.addEventListener('mousedown', (e) => {
             if (this.positionLocked) return;
             this.startDrag(e.clientX, e.clientY);
@@ -349,7 +296,6 @@ class DrawingARApp {
             this.endDrag();
         });
 
-        // Touch events
         canvas.addEventListener('touchstart', (e) => {
             if (this.positionLocked) return;
             e.preventDefault();
@@ -378,7 +324,6 @@ class DrawingARApp {
             }
         });
 
-        // Enable pointer events
         canvas.style.pointerEvents = 'auto';
     }
 
@@ -398,7 +343,6 @@ class DrawingARApp {
         this.templatePosition.x = (x - this.touchStartPos.x) / this.canvas.width;
         this.templatePosition.y = (y - this.touchStartPos.y) / this.canvas.height;
         
-        // Clamp to canvas bounds
         this.templatePosition.x = Math.max(0, Math.min(1, this.templatePosition.x));
         this.templatePosition.y = Math.max(0, Math.min(1, this.templatePosition.y));
         
@@ -428,7 +372,6 @@ class DrawingARApp {
         this.templateScale *= scaleFactor;
         this.templateScale = Math.max(0.1, Math.min(3, this.templateScale));
         
-        // Update slider
         const sliderValue = Math.round(this.templateScale * 100);
         document.getElementById('scale-slider').value = sliderValue;
         document.getElementById('scale-value').textContent = sliderValue + '%';
@@ -459,7 +402,7 @@ class DrawingARApp {
             const img = new Image();
             img.onload = () => {
                 this.templateImage = img;
-                this.showInfoBanner('Vorlage geladen! Verschiebe sie mit dem Finger.');
+                this.showInfoBanner('✅ Vorlage geladen!');
                 document.getElementById('settings-panel').classList.remove('open');
             };
             img.src = e.target.result;
@@ -491,6 +434,22 @@ class DrawingARApp {
         }, duration);
     }
 
+    calculatePerspectiveFromOrientation() {
+        if (!this.gyroEnabled || !this.orientationPermissionGranted) {
+            return { skewX: 0, skewY: 0, scaleY: 1 };
+        }
+
+        const { beta, gamma } = this.deviceOrientation;
+        const betaNormalized = (beta - 45) / 45;
+        const gammaNormalized = gamma / 45;
+        
+        const skewX = Math.max(-0.5, Math.min(0.5, gammaNormalized * 0.3));
+        const skewY = Math.max(-0.5, Math.min(0.5, betaNormalized * 0.3));
+        const scaleY = 1 + Math.abs(betaNormalized) * 0.1;
+        
+        return { skewX, skewY, scaleY };
+    }
+
     drawGrid() {
         if (!this.showGrid) return;
 
@@ -498,18 +457,15 @@ class DrawingARApp {
         const width = this.overlayCanvas.width;
         const height = this.overlayCanvas.height;
 
-        // Center guide
         ctx.strokeStyle = 'rgba(76, 175, 80, 0.6)';
         ctx.lineWidth = 2;
         ctx.setLineDash([10, 10]);
 
-        // Vertical center line
         ctx.beginPath();
         ctx.moveTo(width / 2, 0);
         ctx.lineTo(width / 2, height);
         ctx.stroke();
 
-        // Horizontal center line
         ctx.beginPath();
         ctx.moveTo(0, height / 2);
         ctx.lineTo(width, height / 2);
@@ -517,7 +473,6 @@ class DrawingARApp {
 
         ctx.setLineDash([]);
 
-        // Corner markers
         const margin = 50;
         const markerSize = 30;
         ctx.strokeStyle = 'rgba(76, 175, 80, 0.8)';
@@ -536,7 +491,6 @@ class DrawingARApp {
             ctx.stroke();
         });
 
-        // Reference rectangle
         ctx.strokeStyle = 'rgba(76, 175, 80, 0.4)';
         ctx.lineWidth = 2;
         ctx.strokeRect(margin, margin, width - 2 * margin, height - 2 * margin);
@@ -551,20 +505,15 @@ class DrawingARApp {
 
         ctx.save();
 
-        // Position
         const x = this.templatePosition.x * width;
         const y = this.templatePosition.y * height;
         ctx.translate(x, y);
 
-        // Rotation
         ctx.rotate((this.templateRotation * Math.PI) / 180);
 
-        // Get gyroscope-based perspective
         const gyroPerspective = this.calculatePerspectiveFromOrientation();
         
-        // Apply gyroscope perspective if enabled
         if (this.gyroEnabled && this.orientationPermissionGranted) {
-            // Apply skew based on device tilt
             ctx.transform(
                 1, 
                 gyroPerspective.skewY, 
@@ -575,25 +524,20 @@ class DrawingARApp {
             );
         }
 
-        // Manual perspective adjustment (if user set it)
         if (this.templatePerspective !== 0) {
             const skew = this.templatePerspective / 100;
             ctx.transform(1, skew, 0, 1, 0, 0);
         }
 
-        // Mirror
         if (this.templateMirrored) {
             ctx.scale(-1, 1);
         }
 
-        // Scale
         const imgWidth = this.templateImage.width * this.templateScale;
         const imgHeight = this.templateImage.height * this.templateScale;
 
-        // Opacity
         ctx.globalAlpha = this.templateOpacity;
 
-        // Draw centered
         ctx.drawImage(
             this.templateImage,
             -imgWidth / 2,
@@ -605,26 +549,7 @@ class DrawingARApp {
         ctx.restore();
     }
 
-    animate() {
-        // Clear canvases
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
-
-        // Draw template
-        this.drawTemplate();
-
-        // Draw grid overlay
-        this.drawGrid();
-
-        // Update debug display
-        this.updateDebugDisplay();
-
-        requestAnimationFrame(() => this.animate());
-    }
-
     updateDebugDisplay() {
-        if (!document.getElementById('gyro-debug')) return;
-
         const betaEl = document.getElementById('debug-beta');
         const gammaEl = document.getElementById('debug-gamma');
         const statusEl = document.getElementById('debug-status');
@@ -637,7 +562,7 @@ class DrawingARApp {
                 statusEl.textContent = '✅ Aktiv';
                 statusEl.style.color = '#4CAF50';
             } else if (!this.orientationPermissionGranted) {
-                statusEl.textContent = '⚠️ Keine Berechtigung';
+                statusEl.textContent = '⚠️ Klick 🔄 für Berechtigung';
                 statusEl.style.color = '#FF9800';
             } else {
                 statusEl.textContent = '⏸️ Deaktiviert';
@@ -654,18 +579,29 @@ class DrawingARApp {
         
         if (this.gyroEnabled && this.orientationPermissionGranted) {
             indicator.classList.add('active');
-            indicator.title = 'Gyroscope: Aktiv (Klicken zum Deaktivieren)';
+            indicator.title = 'Gyroscope: Aktiv';
         } else if (!this.orientationPermissionGranted) {
             indicator.classList.add('inactive');
-            indicator.title = 'Gyroscope: Berechtigung erforderlich (Klicken)';
+            indicator.title = 'Gyroscope: Klicken für Berechtigung';
         } else {
             indicator.classList.add('inactive');
-            indicator.title = 'Gyroscope: Aus (Klicken zum Aktivieren)';
+            indicator.title = 'Gyroscope: Aus';
         }
+    }
+
+    animate() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
+
+        this.drawTemplate();
+        this.drawGrid();
+        this.updateDebugDisplay();
+
+        requestAnimationFrame(() => this.animate());
     }
 }
 
-// Initialize app when DOM is ready
+// Initialize app
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         new DrawingARApp();
@@ -678,7 +614,7 @@ if (document.readyState === 'loading') {
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
-            .then(reg => console.log('Service Worker registriert:', reg.scope))
-            .catch(err => console.log('Service Worker Fehler:', err));
+            .then(reg => console.log('Service Worker registered'))
+            .catch(err => console.log('Service Worker error:', err));
     });
 }
