@@ -36,47 +36,66 @@ class DrawingARApp {
     }
 
     async init() {
-        // Request fullscreen mode
-        this.requestFullscreen();
-        
-        await this.setupCamera();
-        this.setupCanvas();
-        this.setupEventListeners();
-        await this.setupGyroscope();
-        this.updateGyroIndicator();
-        this.animate();
-        
-        document.getElementById('loading').classList.add('hidden');
-        this.showInfoBanner('Berühre den Bildschirm, um die Vorlage zu verschieben');
+        try {
+            // Request fullscreen mode
+            this.requestFullscreen();
+            
+            await this.setupCamera();
+            this.setupCanvas();
+            this.setupEventListeners();
+            await this.setupGyroscope();
+            this.updateGyroIndicator();
+            this.animate();
+            
+            document.getElementById('loading').classList.add('hidden');
+            this.showInfoBanner('✅ Bereit! Berühre den Bildschirm, um die Vorlage zu verschieben');
+        } catch (error) {
+            console.error('Initialization error:', error);
+            document.getElementById('loading').classList.add('hidden');
+            
+            // App trotzdem starten (für Testing ohne Kamera)
+            this.setupCanvas();
+            this.setupEventListeners();
+            await this.setupGyroscope();
+            this.updateGyroIndicator();
+            this.animate();
+            
+            this.showInfoBanner('⚠️ App gestartet im Test-Modus (ohne Kamera)', 5000);
+        }
     }
 
     async setupGyroscope() {
-        // Check if DeviceOrientation is supported
-        if (!window.DeviceOrientationEvent) {
-            console.log('Device Orientation not supported');
-            this.gyroEnabled = false;
-            return;
-        }
+        try {
+            // Check if DeviceOrientation is supported
+            if (!window.DeviceOrientationEvent) {
+                console.log('Device Orientation not supported');
+                this.gyroEnabled = false;
+                return;
+            }
 
-        // iOS 13+ requires permission
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-            try {
-                const permission = await DeviceOrientationEvent.requestPermission();
-                if (permission === 'granted') {
-                    this.orientationPermissionGranted = true;
-                    this.startOrientationTracking();
-                } else {
-                    console.log('Device Orientation permission denied');
+            // iOS 13+ requires permission
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission === 'granted') {
+                        this.orientationPermissionGranted = true;
+                        this.startOrientationTracking();
+                    } else {
+                        console.log('Device Orientation permission denied');
+                        this.gyroEnabled = false;
+                    }
+                } catch (error) {
+                    console.error('Error requesting orientation permission:', error);
                     this.gyroEnabled = false;
                 }
-            } catch (error) {
-                console.error('Error requesting orientation permission:', error);
-                this.gyroEnabled = false;
+            } else {
+                // Non-iOS or older iOS - no permission needed
+                this.orientationPermissionGranted = true;
+                this.startOrientationTracking();
             }
-        } else {
-            // Non-iOS or older iOS - no permission needed
-            this.orientationPermissionGranted = true;
-            this.startOrientationTracking();
+        } catch (error) {
+            console.error('Gyroscope setup error:', error);
+            this.gyroEnabled = false;
         }
     }
 
@@ -137,6 +156,11 @@ class DrawingARApp {
 
     async setupCamera() {
         try {
+            // Check if mediaDevices is supported
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                throw new Error('Camera API not supported in this browser');
+            }
+
             const constraints = {
                 video: {
                     facingMode: 'environment', // Rückkamera bevorzugen
@@ -145,18 +169,59 @@ class DrawingARApp {
                 }
             };
             
+            console.log('Requesting camera access...');
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             this.video.srcObject = stream;
             
-            return new Promise((resolve) => {
+            console.log('Camera stream acquired, waiting for video metadata...');
+            return new Promise((resolve, reject) => {
                 this.video.onloadedmetadata = () => {
-                    this.video.play();
-                    resolve();
+                    console.log('Video metadata loaded');
+                    this.video.play()
+                        .then(() => {
+                            console.log('Video playing successfully');
+                            resolve();
+                        })
+                        .catch(err => {
+                            console.error('Error playing video:', err);
+                            reject(err);
+                        });
+                };
+                
+                // Timeout nach 10 Sekunden
+                setTimeout(() => {
+                    reject(new Error('Camera initialization timeout'));
+                }, 10000);
+                
+                this.video.onerror = (err) => {
+                    console.error('Video element error:', err);
+                    reject(err);
                 };
             });
         } catch (error) {
             console.error('Kamera-Fehler:', error);
-            alert('Kamera konnte nicht gestartet werden. Bitte erlaube den Kamera-Zugriff.');
+            
+            // Zeige spezifische Fehlermeldung
+            let errorMessage = 'Kamera konnte nicht gestartet werden. ';
+            
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                errorMessage += 'Bitte erlaube den Kamera-Zugriff in deinen Browser-Einstellungen.';
+            } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                errorMessage += 'Keine Kamera gefunden. Stelle sicher, dass dein Gerät eine Kamera hat.';
+            } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+                errorMessage += 'Kamera wird bereits von einer anderen App verwendet.';
+            } else if (error.message.includes('not supported')) {
+                errorMessage += 'Dein Browser unterstützt keinen Kamera-Zugriff. Verwende Chrome, Safari oder Firefox.';
+            } else {
+                errorMessage += error.message || 'Unbekannter Fehler.';
+            }
+            
+            // Verstecke Loading und zeige Fehler
+            document.getElementById('loading').classList.add('hidden');
+            alert(errorMessage);
+            
+            // Optional: Zeige UI auch ohne Kamera
+            this.showInfoBanner('⚠️ App läuft ohne Kamera. Lade eine Vorlage hoch zum Testen.', 5000);
         }
     }
 

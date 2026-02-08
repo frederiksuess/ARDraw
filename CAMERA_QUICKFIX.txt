@@ -1,0 +1,85 @@
+# ⚡ KAMERA-PROBLEM QUICK FIX
+
+## 🔴 Problem: "Kamera wird geladen..." hängt unendlich
+
+## ✅ Lösung in 3 Schritten:
+
+### 1. HTTPS verwenden! (WICHTIGSTE FIX!)
+
+❌ **FALSCH:**
+```
+http://username.github.io/ar-zeichen-hilfe
+```
+
+✅ **RICHTIG:**
+```
+https://username.github.io/ar-zeichen-hilfe
+```
+
+**Warum?** Browser erlauben Kamera-Zugriff NUR über HTTPS!
+
+### 2. Kamera-Berechtigung erteilen
+
+Wenn Browser fragt:
+- 📷 **"Kamera erlauben"** → **JA klicken!**
+- Nicht "Blockieren" oder "Später"
+
+### 3. Hard Reload
+
+- **Windows/Linux:** `Ctrl + Shift + R`
+- **Mac:** `Cmd + Shift + R`
+
+## 🎯 Schnelltest
+
+**Öffne diese URL zum Testen:**
+```
+https://mozilla.github.io/webrtc-landing/gum_test.html
+```
+
+- ✅ Funktioniert? → Deine App sollte auch gehen
+- ❌ Funktioniert nicht? → Browser/Berechtigungs-Problem
+
+## 🔧 Was wurde gefixt (v3.1)?
+
+**Neues Error Handling:**
+- ✅ 10-Sekunden Timeout (kein endloses Warten mehr!)
+- ✅ Detaillierte Fehlermeldungen
+- ✅ Auto-Start im Test-Modus nach Timeout
+- ✅ App funktioniert auch ohne Kamera zum Testen
+- ✅ Bessere Console-Logs für Debugging
+
+**Die App startet jetzt IMMER** (mit oder ohne Kamera)!
+
+## 📱 Mobile-Spezifisch
+
+**Android:**
+- Chrome Browser verwenden
+- HTTPS-URL
+- Berechtigung erlauben
+
+**iOS:**
+- Safari Browser (nicht Chrome!)
+- iOS 14.5+
+- Einstellungen → Safari → Kamera → "Erlauben"
+
+## 🆘 Immer noch Probleme?
+
+**Lies die vollständige Anleitung:**
+→ `CAMERA_TROUBLESHOOTING.md`
+
+**Oder kontaktiere mit diesen Infos:**
+1. Browser & Version (z.B. "Chrome 120")
+2. Betriebssystem (z.B. "Windows 11", "iOS 17")
+3. Fehler in Browser-Console (F12 → Console)
+
+---
+
+## 🎉 Neue Version v3.1 Features:
+
+- ✅ Kamera-Timeout nach 10 Sekunden
+- ✅ Test-Modus ohne Kamera
+- ✅ Bessere Fehlermeldungen
+- ✅ Console-Logging für Debugging
+- ✅ Automatisches Fallback
+
+**Einfach neue Dateien hochladen und neu deployen!** 🚀
