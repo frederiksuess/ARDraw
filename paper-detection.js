@@ -18,29 +18,33 @@ class PaperDetector {
         try {
             // Resize canvas für Performance
             const scale = 0.25; // 25% der Originalgröße für Detektion
-            this.detectionCanvas.width = videoElement.videoWidth * scale;
-            this.detectionCanvas.height = videoElement.videoHeight * scale;
+            const detectionWidth = Math.floor(videoElement.videoWidth * scale);
+            const detectionHeight = Math.floor(videoElement.videoHeight * scale);
+            
+            this.detectionCanvas.width = detectionWidth;
+            this.detectionCanvas.height = detectionHeight;
 
             // Draw current video frame
             this.detectionCtx.drawImage(
                 videoElement,
                 0, 0,
-                this.detectionCanvas.width,
-                this.detectionCanvas.height
+                detectionWidth,
+                detectionHeight
             );
 
             // Get image data
             const imageData = this.detectionCtx.getImageData(
                 0, 0,
-                this.detectionCanvas.width,
-                this.detectionCanvas.height
+                detectionWidth,
+                detectionHeight
             );
 
             // Detect white paper
             const corners = this.findPaperCorners(imageData);
 
             if (corners && corners.confidence > this.confidenceThreshold) {
-                // Scale corners back to full resolution
+                // WICHTIG: Skaliere Koordinaten zurück zur CANVAS-Größe, nicht Video-Größe
+                // Die Canvas hat möglicherweise andere Dimensionen als das Video
                 this.detectedCorners = {
                     topLeft: {
                         x: corners.topLeft.x / scale,
@@ -58,7 +62,9 @@ class PaperDetector {
                         x: corners.bottomRight.x / scale,
                         y: corners.bottomRight.y / scale
                     },
-                    confidence: corners.confidence
+                    confidence: corners.confidence,
+                    videoWidth: videoElement.videoWidth,
+                    videoHeight: videoElement.videoHeight
                 };
 
                 return this.detectedCorners;
@@ -185,50 +191,73 @@ class PaperDetector {
     calculatePerspectiveTransform(corners, canvasWidth, canvasHeight) {
         if (!corners) return null;
 
-        // Calculate center and dimensions of detected paper
-        const centerX = (corners.topLeft.x + corners.topRight.x + 
-                        corners.bottomLeft.x + corners.bottomRight.x) / 4;
-        const centerY = (corners.topLeft.y + corners.topRight.y + 
-                        corners.bottomLeft.y + corners.bottomRight.y) / 4;
+        // Berechne Skalierung von Video zu Canvas
+        const videoWidth = corners.videoWidth || canvasWidth;
+        const videoHeight = corners.videoHeight || canvasHeight;
+        
+        const scaleX = canvasWidth / videoWidth;
+        const scaleY = canvasHeight / videoHeight;
+        
+        // Skaliere Corners auf Canvas-Koordinaten
+        const tl = {
+            x: corners.topLeft.x * scaleX,
+            y: corners.topLeft.y * scaleY
+        };
+        const tr = {
+            x: corners.topRight.x * scaleX,
+            y: corners.topRight.y * scaleY
+        };
+        const bl = {
+            x: corners.bottomLeft.x * scaleX,
+            y: corners.bottomLeft.y * scaleY
+        };
+        const br = {
+            x: corners.bottomRight.x * scaleX,
+            y: corners.bottomRight.y * scaleY
+        };
+
+        // Calculate center
+        const centerX = (tl.x + tr.x + bl.x + br.x) / 4;
+        const centerY = (tl.y + tr.y + bl.y + br.y) / 4;
 
         // Calculate rotation angle from top edge
-        const dx = corners.topRight.x - corners.topLeft.x;
-        const dy = corners.topRight.y - corners.topLeft.y;
+        const dx = tr.x - tl.x;
+        const dy = tr.y - tl.y;
         const rotation = Math.atan2(dy, dx);
 
         // Calculate skew from perspective distortion
         const topWidth = Math.sqrt(
-            Math.pow(corners.topRight.x - corners.topLeft.x, 2) +
-            Math.pow(corners.topRight.y - corners.topLeft.y, 2)
+            Math.pow(tr.x - tl.x, 2) +
+            Math.pow(tr.y - tl.y, 2)
         );
         const bottomWidth = Math.sqrt(
-            Math.pow(corners.bottomRight.x - corners.bottomLeft.x, 2) +
-            Math.pow(corners.bottomRight.y - corners.bottomLeft.y, 2)
+            Math.pow(br.x - bl.x, 2) +
+            Math.pow(br.y - bl.y, 2)
         );
         const leftHeight = Math.sqrt(
-            Math.pow(corners.bottomLeft.x - corners.topLeft.x, 2) +
-            Math.pow(corners.bottomLeft.y - corners.topLeft.y, 2)
+            Math.pow(bl.x - tl.x, 2) +
+            Math.pow(bl.y - tl.y, 2)
         );
         const rightHeight = Math.sqrt(
-            Math.pow(corners.bottomRight.x - corners.topRight.x, 2) +
-            Math.pow(corners.bottomRight.y - corners.topRight.y, 2)
+            Math.pow(br.x - tr.x, 2) +
+            Math.pow(br.y - tr.y, 2)
         );
 
         // Calculate perspective distortion
-        const horizontalSkew = (bottomWidth - topWidth) / topWidth;
-        const verticalSkew = (rightHeight - leftHeight) / leftHeight;
+        const horizontalSkew = (bottomWidth - topWidth) / Math.max(topWidth, 1);
+        const verticalSkew = (rightHeight - leftHeight) / Math.max(leftHeight, 1);
 
         // Calculate scale based on paper size
         const avgWidth = (topWidth + bottomWidth) / 2;
         const avgHeight = (leftHeight + rightHeight) / 2;
-        const paperAspect = avgWidth / avgHeight;
+        const paperAspect = avgWidth / Math.max(avgHeight, 1);
 
         return {
             centerX: centerX / canvasWidth,
             centerY: centerY / canvasHeight,
             rotation: rotation,
-            horizontalSkew: horizontalSkew,
-            verticalSkew: verticalSkew,
+            horizontalSkew: Math.max(-0.5, Math.min(0.5, horizontalSkew)),
+            verticalSkew: Math.max(-0.5, Math.min(0.5, verticalSkew)),
             scale: Math.sqrt((avgWidth * avgHeight) / (canvasWidth * canvasHeight)),
             paperAspect: paperAspect,
             confidence: corners.confidence
@@ -239,6 +268,34 @@ class PaperDetector {
         if (!corners) return;
 
         ctx.save();
+        
+        // Berechne Skalierung von Video zu Canvas
+        // Video und Canvas können unterschiedliche Größen haben
+        const videoWidth = corners.videoWidth || canvasWidth;
+        const videoHeight = corners.videoHeight || canvasHeight;
+        
+        const scaleX = canvasWidth / videoWidth;
+        const scaleY = canvasHeight / videoHeight;
+        
+        // Skaliere Corner-Koordinaten auf Canvas-Größe
+        const scaledCorners = {
+            topLeft: {
+                x: corners.topLeft.x * scaleX,
+                y: corners.topLeft.y * scaleY
+            },
+            topRight: {
+                x: corners.topRight.x * scaleX,
+                y: corners.topRight.y * scaleY
+            },
+            bottomLeft: {
+                x: corners.bottomLeft.x * scaleX,
+                y: corners.bottomLeft.y * scaleY
+            },
+            bottomRight: {
+                x: corners.bottomRight.x * scaleX,
+                y: corners.bottomRight.y * scaleY
+            }
+        };
         
         // Draw corner markers
         ctx.strokeStyle = '#4CAF50';
@@ -254,34 +311,45 @@ class PaperDetector {
             
             // Label
             ctx.fillStyle = 'white';
-            ctx.font = 'bold 12px sans-serif';
-            ctx.fillText(label, corner.x - 5, corner.y + 5);
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, corner.x, corner.y);
         };
 
-        drawCorner(corners.topLeft, '1');
-        drawCorner(corners.topRight, '2');
-        drawCorner(corners.bottomLeft, '3');
-        drawCorner(corners.bottomRight, '4');
+        drawCorner(scaledCorners.topLeft, '1');
+        drawCorner(scaledCorners.topRight, '2');
+        drawCorner(scaledCorners.bottomLeft, '3');
+        drawCorner(scaledCorners.bottomRight, '4');
 
         // Draw paper outline
         ctx.strokeStyle = '#4CAF50';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(corners.topLeft.x, corners.topLeft.y);
-        ctx.lineTo(corners.topRight.x, corners.topRight.y);
-        ctx.lineTo(corners.bottomRight.x, corners.bottomRight.y);
-        ctx.lineTo(corners.bottomLeft.x, corners.bottomLeft.y);
+        ctx.moveTo(scaledCorners.topLeft.x, scaledCorners.topLeft.y);
+        ctx.lineTo(scaledCorners.topRight.x, scaledCorners.topRight.y);
+        ctx.lineTo(scaledCorners.bottomRight.x, scaledCorners.bottomRight.y);
+        ctx.lineTo(scaledCorners.bottomLeft.x, scaledCorners.bottomLeft.y);
         ctx.closePath();
         ctx.stroke();
 
         // Draw confidence indicator
-        ctx.fillStyle = 'rgba(76, 175, 80, 0.8)';
-        ctx.fillRect(10, 10, 200, 30);
+        const confidence = Math.round(corners.confidence * 100);
+        const indicatorWidth = 220;
+        const indicatorHeight = 40;
+        const padding = 15;
+        
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.9)';
+        ctx.fillRect(padding, padding, indicatorWidth, indicatorHeight);
+        
         ctx.fillStyle = 'white';
-        ctx.font = 'bold 14px sans-serif';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
         ctx.fillText(
-            `Papier erkannt: ${Math.round(corners.confidence * 100)}%`,
-            20, 30
+            `📄 Papier: ${confidence}%`,
+            padding + 10,
+            padding + indicatorHeight / 2
         );
 
         ctx.restore();
