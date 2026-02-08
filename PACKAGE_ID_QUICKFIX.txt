@@ -1,0 +1,105 @@
+# ⚡ QUICK FIX: Apps überschreiben sich
+
+## 🎯 Das Problem in 1 Satz
+Beide Apps haben die gleiche **Package ID** → Android denkt es ist ein Update.
+
+## ✅ Die Lösung in 3 Schritten
+
+### 1️⃣ PWABuilder öffnen
+- Gehe zu: https://www.pwabuilder.com
+- Scanne deine AR Zeichen-Hilfe URL
+
+### 2️⃣ Package ID ändern
+- Klicke **"Android"** → **"Generate Package"**
+- Finde das Feld **"Package ID"**
+- Ändere von: `com.example.myapp`
+- Zu: `com.example.arzeichenhilfe`
+
+### 3️⃣ Neu generieren
+- Klicke **"Generate"**
+- Lade die neue APK herunter
+- Installiere sie → Jetzt separate App! ✅
+
+## 📱 Beispiel Package IDs
+
+**Deine Nothing To-Do App hat wahrscheinlich:**
+```
+com.example.nothingtodo
+```
+
+**Deine AR Zeichen-App sollte haben:**
+```
+com.example.arzeichenhilfe
+```
+
+**Oder mit deinem Namen:**
+```
+com.maxmustermann.nothingtodo
+com.maxmustermann.arzeichenhilfe
+```
+
+## ⚠️ Package ID Regeln
+
+✅ **RICHTIG:**
+- `com.example.arzeichenhilfe`
+- `com.deinname.drawinghelper`
+- `de.vorname.nachname.drawing`
+
+❌ **FALSCH:**
+- `com.example.myapp` (zu generisch)
+- `Com.Example.App` (Großbuchstaben)
+- `com.example.ar zeichen` (Leerzeichen)
+- `com.example.ar-zeichen` (Bindestriche)
+
+## 🔍 Wo finde ich die Package ID in PWABuilder?
+
+Wenn du auf **"Generate Package"** klickst, siehst du ein Formular:
+
+```
+┌─────────────────────────────────────┐
+│ Package Options                     │
+├─────────────────────────────────────┤
+│ Package ID: [com.example.myapp    ] │ ← HIER ÄNDERN!
+│ App name:   [AR Zeichen-Hilfe     ] │
+│ Version:    [1.0.0                ] │
+│ Host:       [username.github.io   ] │
+└─────────────────────────────────────┘
+```
+
+## 💡 Best Practice
+
+**Verwende dein Schema:**
+```
+com.deinname.app1
+com.deinname.app2
+com.deinname.app3
+```
+
+Oder:
+```
+com.deinname.productivity.todo
+com.deinname.creative.drawing
+```
+
+## 🎉 Ergebnis
+
+**Vorher:**
+- Installiere neue APK → "Update" → Alte App überschrieben 😞
+
+**Nachher:**
+- Installiere neue APK → "Installieren" → Beide Apps getrennt! 😊
+
+## 📝 Schnell-Checkliste
+
+- [ ] PWABuilder geöffnet
+- [ ] URL gescannt
+- [ ] "Android" → "Generate Package"
+- [ ] Package ID geändert zu: `com.example.arzeichenhilfe`
+- [ ] "Generate" geklickt
+- [ ] Neue APK heruntergeladen
+- [ ] APK installiert
+- [ ] Beide Apps sind jetzt getrennt!
+
+---
+
+**Problem gelöst in unter 2 Minuten! 🚀**
